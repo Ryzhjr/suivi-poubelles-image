@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="page-head">
+  <div>
+    <h1>Dashboard</h1>
+    <p>Suivi des images, annotations et predictions automatiques.</p>
+  </div>
+  <form method="post" action="{{ url_for('import_dataset') }}">
+    <button class="button secondary" type="submit">Importer le dataset fourni</button>
+  </form>
+</section>
+
+<section class="metrics">
+  <a class="metric" href="{{ url_for('images') }}">
+    <span>Total images</span>
+    <strong>{{ stats.total }}</strong>
+  </a>
+  <a class="metric clean" href="{{ url_for('images', label='clean') }}">
+    <span>Clean</span>
+    <strong>{{ stats.manual.get('clean', 0) }}</strong>
+  </a>
+  <a class="metric dirty" href="{{ url_for('images', label='dirty') }}">
+    <span>Dirty</span>
+    <strong>{{ stats.manual.get('dirty', 0) }}</strong>
+  </a>
+  <a class="metric" href="{{ url_for('images', label='non_annotee') }}">
+    <span>Non annotees</span>
+    <strong>{{ stats.manual.get('non_annotee', 0) }}</strong>
+  </a>
+</section>
+
+<section class="grid two">
+  <div class="panel">
+    <h2>Annotations manuelles</h2>
+    <div class="bar-list">
+      {% for label, count in stats.manual.items() %}
+        {% set percent = (count / stats.total * 100) if stats.total else 0 %}
+        <div class="bar-row">
+          <div class="bar-label"><span>{{ label }}</span><strong>{{ count }}</strong></div>
+          <div class="bar-track"><div class="bar-fill" style="width: {{ percent }}%"></div></div>
+        </div>
+      {% else %}
+        <p>Aucune donnee.</p>
+      {% endfor %}
+    </div>
+  </div>
+  <div class="panel">
+    <h2>Predictions automatiques</h2>
+    <div class="bar-list">
+      {% for label, count in stats.automatic.items() %}
+        {% set percent = (count / stats.total * 100) if stats.total else 0 %}
+        <div class="bar-row">
+          <div class="bar-label"><span>{{ label }}</span><strong>{{ count }}</strong></div>
+          <div class="bar-track"><div class="bar-fill auto" style="width: {{ percent }}%"></div></div>
+        </div>
+      {% else %}
+        <p>Aucune donnee.</p>
+      {% endfor %}
+    </div>
+  </div>
+</section>
+
+<section class="panel">
+  <div class="section-title">
+    <h2>Dernieres images</h2>
+    <a href="{{ url_for('images') }}">Voir toutes</a>
+  </div>
+  <div class="thumb-grid">
+    {% for image in stats.recent %}
+      <a class="thumb-card" href="{{ url_for('image_detail', image_id=image.id) }}">
+        <img src="{{ url_for('media', filepath=image.filepath) }}" alt="{{ image.original_filename }}">
+        <div>
+          <strong>{{ image.manual_label or 'non annotee' }}</strong>
+          <span>Prediction : {{ image.automatic_label }}</span>
+        </div>
+      </a>
+    {% else %}
+      <p>Aucune image pour le moment. Importe le dataset ou ajoute une image.</p>
+    {% endfor %}
+  </div>
+</section>
+
+{% endblock %}

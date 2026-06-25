@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="page-head">
+  <div>
+    <h1>Detail image</h1>
+    <p>{{ image.original_filename }}</p>
+  </div>
+  <a class="button secondary" href="{{ url_for('images') }}">Retour aux images</a>
+</section>
+
+<section class="detail-layout">
+  <div class="panel image-panel">
+    <img class="main-image" src="{{ url_for('media', filepath=image.filepath) }}" alt="{{ image.original_filename }}">
+  </div>
+
+  <div class="panel">
+    <h2>Annotation</h2>
+    <div class="status-line">
+      <span>Adresse</span>
+      <strong>{{ image.location_address or 'non renseignee' }}</strong>
+    </div>
+    <div class="status-line">
+      <span>GPS</span>
+      {% if image.latitude is not none and image.longitude is not none %}
+        <strong>{{ image.latitude }}, {{ image.longitude }}</strong>
+      {% else %}
+        <strong>non renseigne</strong>
+      {% endif %}
+    </div>
+    {% if image.location_accuracy is not none %}
+      <div class="status-line">
+        <span>Precision GPS</span>
+        <strong>{{ image.location_accuracy|round|int }} m</strong>
+      </div>
+    {% endif %}
+    <div class="status-line">
+      <span>Manuelle</span>
+      <strong>{{ image.manual_label or 'non annotee' }}</strong>
+    </div>
+    <div class="status-line">
+      <span>Automatique</span>
+      <strong>{{ image.automatic_label }}</strong>
+    </div>
+
+    <form class="annotation-form" method="post" action="{{ url_for('annotate', image_id=image.id) }}">
+      <button class="button clean" name="manual_label" value="clean" type="submit">Clean</button>
+      <button class="button dirty" name="manual_label" value="dirty" type="submit">Dirty</button>
+      <button class="button secondary" name="manual_label" value="unknown" type="submit">Non annotee</button>
+    </form>
+
+    <h2>Caracteristiques</h2>
+    <dl class="features">
+      <div><dt>Taille fichier</dt><dd>{{ format_size(image.file_size) }}</dd></div>
+      <div><dt>Dimensions</dt><dd>{{ image.width }} x {{ image.height }} px</dd></div>
+      <div><dt>Rouge moyen</dt><dd>{{ image.avg_red }}</dd></div>
+      <div><dt>Vert moyen</dt><dd>{{ image.avg_green }}</dd></div>
+      <div><dt>Bleu moyen</dt><dd>{{ image.avg_blue }}</dd></div>
+      <div><dt>Luminosite</dt><dd>{{ image.brightness }}</dd></div>
+      <div><dt>Contraste</dt><dd>{{ image.contrast }}</dd></div>
+      <div><dt>Score contours</dt><dd>{{ image.edge_score }}</dd></div>
+    </dl>
+  </div>
+</section>
+{% endblock %}

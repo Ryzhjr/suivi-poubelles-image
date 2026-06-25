@@ -1,0 +1,7 @@
+{
+  "python.defaultInterpreterPath": "C:\\Users\\erwan\\AppData\\Local\\Programs\\Python\\Python313\\python.exe",
+  "code-runner.executorMap": {
+    "python": "C:\\Users\\erwan\\AppData\\Local\\Programs\\Python\\Python313\\python.exe -u"
+  },
+  "code-runner.runInTerminal": true
+}

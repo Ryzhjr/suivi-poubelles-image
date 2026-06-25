@@ -1,0 +1,83 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="page-head">
+  <div>
+    <h1>Upload image</h1>
+    <p>Ajoute une photo de poubelle ou de zone de dechets.</p>
+  </div>
+</section>
+
+<section class="panel narrow">
+  <form class="upload-form" method="post" enctype="multipart/form-data">
+    <div class="field">
+      <label for="image">Image JPG, JPEG ou PNG</label>
+      <input id="image" name="image" type="file" accept="image/*" capture="environment" required>
+    </div>
+
+    <div class="field">
+      <label for="location_address">Adresse ou zone</label>
+      <input id="location_address" name="location_address" type="text" placeholder="Ex. Lyon 2, rue de la Republique">
+    </div>
+
+    <input id="latitude" name="latitude" type="hidden">
+    <input id="longitude" name="longitude" type="hidden">
+    <input id="location_accuracy" name="location_accuracy" type="hidden">
+
+    <div class="geo-row">
+      <button class="button secondary" id="geolocation-button" type="button">Utiliser ma position</button>
+      <span class="geo-status" id="geolocation-status">Position non ajoutee</span>
+    </div>
+
+    <div class="field">
+      <label for="manual_label">Etat observe</label>
+      <select id="manual_label" name="manual_label">
+        <option value="">Non annotee</option>
+        <option value="clean">Clean</option>
+        <option value="dirty">Dirty</option>
+      </select>
+    </div>
+
+    <button class="button" type="submit">Analyser l'image</button>
+  </form>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  const geoButton = document.getElementById("geolocation-button");
+  const geoStatus = document.getElementById("geolocation-status");
+  const latitudeInput = document.getElementById("latitude");
+  const longitudeInput = document.getElementById("longitude");
+  const accuracyInput = document.getElementById("location_accuracy");
+
+  geoButton.addEventListener("click", () => {
+    if (!navigator.geolocation) {
+      geoStatus.textContent = "Geolocalisation indisponible";
+      return;
+    }
+
+    geoButton.disabled = true;
+    geoStatus.textContent = "Recherche de position...";
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        latitudeInput.value = position.coords.latitude;
+        longitudeInput.value = position.coords.longitude;
+        accuracyInput.value = position.coords.accuracy;
+        geoStatus.textContent = `Position ajoutee (${Math.round(position.coords.accuracy)} m)`;
+        geoButton.disabled = false;
+      },
+      () => {
+        geoStatus.textContent = "Position refusee ou indisponible";
+        geoButton.disabled = false;
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: 10000,
+        maximumAge: 0
+      }
+    );
+  });
+</script>
+{% endblock %}

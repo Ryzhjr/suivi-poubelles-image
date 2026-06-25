@@ -1,0 +1,246 @@
+FEUILLE DE ROUTE - PARTIES OBLIGATOIRES DU PROJET
+
+Projet : Plateforme intelligente de suivi des poubelles par image
+Objectif : Realiser une application web simple permettant de collecter, annoter,
+analyser et classifier des images de poubelles ou zones de dechets.
+
+
+1. COMPRENDRE LE CONTEXTE DU PROJET
+
+- Lire le README du projet.
+- Comprendre le probleme :
+  manque de suivi des poubelles pleines ou debordantes.
+- Comprendre l'objectif :
+  detecter l'etat des poubelles a partir d'images pour prevenir les depots sauvages.
+- Identifier les donnees disponibles :
+  Data/train/with_label/clean
+  Data/train/with_label/dirty
+  Data/train/no_label
+  Data/test
+
+
+2. DEFINIR LE PERIMETRE MINIMUM
+
+Fonctionnalites obligatoires a realiser :
+
+- Application web simple.
+- Upload d'image.
+- Affichage de l'image envoyee.
+- Annotation manuelle de l'image.
+- Extraction automatique de caracteristiques simples.
+- Classification automatique par regles conditionnelles.
+- Stockage des informations dans une base de donnees.
+- Dashboard avec statistiques de base.
+- Documentation technique.
+
+
+3. CHOISIR LES TECHNOLOGIES
+
+Choix recommande :
+
+- Backend : Python Flask.
+- Base de donnees : SQLite.
+- Traitement d'image : Pillow.
+- Frontend : HTML, CSS, Bootstrap.
+- Graphiques : Chart.js ou matplotlib.
+
+
+4. CREER LA STRUCTURE DU PROJET
+
+Structure minimale attendue :
+
+- app.py : application Flask principale.
+- requirements.txt : dependances Python.
+- templates/ : pages HTML.
+- static/ : fichiers CSS, JS et images statiques.
+- uploads/ : images envoyees par les utilisateurs.
+- database.db : base de donnees SQLite.
+- README.md : documentation du projet.
+
+
+5. CREER LA BASE DE DONNEES
+
+Table principale : images
+
+Champs a prevoir :
+
+- id.
+- filename.
+- filepath.
+- upload_date.
+- manual_label.
+- automatic_label.
+- file_size.
+- width.
+- height.
+- avg_red.
+- avg_green.
+- avg_blue.
+- brightness.
+- contrast.
+- edge_score.
+
+
+6. REALISER L'UPLOAD D'IMAGE
+
+Fonctionnalites :
+
+- Creer une page d'upload.
+- Autoriser les formats JPG, JPEG et PNG.
+- Verifier qu'un fichier a bien ete envoye.
+- Sauvegarder l'image dans le dossier uploads/.
+- Afficher l'image apres l'upload.
+
+
+7. EXTRAIRE LES CARACTERISTIQUES DES IMAGES
+
+Pour chaque image, calculer :
+
+- Taille du fichier.
+- Largeur de l'image.
+- Hauteur de l'image.
+- Couleur moyenne RGB.
+- Luminosite moyenne.
+- Contraste simple.
+- Score simple de contours ou complexite visuelle.
+
+Ces caracteristiques doivent etre enregistrees dans la base de donnees.
+
+
+8. AJOUTER L'ANNOTATION MANUELLE
+
+Fonctionnalites :
+
+- Afficher une image.
+- Ajouter deux boutons d'annotation :
+  clean / dirty
+  ou
+  vide / pleine.
+- Enregistrer l'annotation choisie dans la base de donnees.
+- Pouvoir modifier une annotation si besoin.
+
+
+9. AJOUTER LA CLASSIFICATION AUTOMATIQUE PAR REGLES
+
+Principe :
+
+- Ne pas utiliser de machine learning pour la version obligatoire.
+- Utiliser des regles conditionnelles simples.
+
+Exemple de logique :
+
+- Si luminosite faible et score de contours eleve : classer dirty.
+- Si luminosite correcte et score de contours faible : classer clean.
+- Sinon : classer unknown.
+
+La prediction automatique doit etre visible dans l'interface et stockee en base.
+
+
+10. CREER UNE PAGE LISTE DES IMAGES
+
+Fonctionnalites :
+
+- Afficher toutes les images enregistrees.
+- Voir pour chaque image :
+  nom du fichier,
+  date d'ajout,
+  annotation manuelle,
+  prediction automatique.
+- Ajouter un lien vers la page detail de chaque image.
+
+
+11. CREER UNE PAGE DETAIL D'IMAGE
+
+Fonctionnalites :
+
+- Afficher l'image en grand.
+- Afficher les caracteristiques extraites.
+- Afficher l'annotation manuelle.
+- Afficher la classification automatique.
+- Permettre d'annoter ou modifier l'annotation.
+
+
+12. CREER LE DASHBOARD
+
+Indicateurs obligatoires :
+
+- Nombre total d'images.
+- Nombre d'images clean.
+- Nombre d'images dirty.
+- Nombre d'images non annotees.
+- Repartition des annotations manuelles.
+- Repartition des predictions automatiques.
+
+Graphiques possibles :
+
+- Diagramme clean / dirty.
+- Bar chart des predictions.
+- Evolution du nombre d'images ajoutees.
+
+
+13. IMPORTER LES DONNEES FOURNIES
+
+Objectif :
+
+- Utiliser les images deja presentes dans Data/.
+- Importer les images clean et dirty deja labellisees.
+- Calculer leurs caracteristiques.
+- Les enregistrer dans la base.
+- Garder les images no_label pour annotation ou prediction.
+
+
+14. TESTER L'APPLICATION
+
+Tests manuels obligatoires :
+
+- L'application se lance correctement.
+- L'upload fonctionne.
+- Les images sont stockees.
+- Les caracteristiques sont extraites.
+- Les annotations sont sauvegardees.
+- Les predictions automatiques sont generees.
+- Le dashboard affiche les bonnes statistiques.
+- Les pages principales sont accessibles.
+
+
+15. REDIGER LA DOCUMENTATION TECHNIQUE
+
+La documentation doit expliquer :
+
+- Le contexte du projet.
+- Le probleme traite.
+- Les donnees utilisees.
+- Les technologies choisies.
+- La structure du projet.
+- Le fonctionnement de l'upload.
+- Le fonctionnement de l'extraction de caracteristiques.
+- Les regles de classification.
+- Le fonctionnement du dashboard.
+- Les limites du projet.
+- Les pistes d'amelioration.
+
+
+16. PREPARER LA DEMONSTRATION
+
+Scenario de demo :
+
+- Ouvrir l'application.
+- Montrer le dashboard.
+- Uploader une image.
+- Voir les caracteristiques extraites.
+- Montrer la prediction automatique.
+- Annoter l'image manuellement.
+- Revenir au dashboard et montrer la mise a jour des statistiques.
+
+
+OBJECTIF FINAL DE LA VERSION OBLIGATOIRE
+
+Obtenir une application web fonctionnelle, simple et claire, capable de :
+
+- recevoir des images,
+- extraire des informations utiles,
+- enregistrer les donnees,
+- proposer une classification automatique explicable,
+- permettre l'annotation manuelle,
+- afficher des statistiques dans un dashboard.
+
