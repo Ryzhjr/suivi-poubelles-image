@@ -1,45 +1,62 @@
 {% extends "base.html" %}
 
 {% block content %}
-<section class="page-head">
-  <div>
-    <h1>Upload image</h1>
-    <p>Ajoute une photo de poubelle ou de zone de dechets.</p>
+<section class="page-header">
+  <div class="container">
+    <div class="page-header-inner">
+      <div>
+        <h1>Signaler un depot sauvage</h1>
+        <p>Ajoutez une photo et aidez-nous a identifier les zones a risque</p>
+      </div>
+    </div>
   </div>
 </section>
 
-<section class="panel narrow">
-  <form class="upload-form" method="post" enctype="multipart/form-data">
-    <div class="field">
-      <label for="image">Image JPG, JPEG ou PNG</label>
-      <input id="image" name="image" type="file" accept="image/*" capture="environment" required>
+<section class="page-section">
+  <div class="container container-narrow">
+    <div class="form-card">
+      <form class="upload-form" method="post" enctype="multipart/form-data">
+        <div class="field">
+          <label for="image">Photo du depot sauvage*</label>
+          <span class="field-hint">Formats acceptes : JPG, JPEG, PNG</span>
+          <input id="image" name="image" type="file" accept="image/*" capture="environment" required>
+        </div>
+
+        <div class="field">
+          <label for="location_address">Adresse ou zone</label>
+          <span class="field-hint">Indiquez la localisation du depot (optionnel)</span>
+          <input id="location_address" name="location_address" type="text" placeholder="Ex : Lyon 2eme, Rue de la Republique">
+        </div>
+
+        <input id="latitude" name="latitude" type="hidden">
+        <input id="longitude" name="longitude" type="hidden">
+        <input id="location_accuracy" name="location_accuracy" type="hidden">
+
+        <div class="geo-row">
+          <button class="button button-secondary" id="geolocation-button" type="button">📍 Utiliser ma position</button>
+          <span class="geo-status" id="geolocation-status">Position non ajoutee</span>
+        </div>
+
+        <div class="field">
+          <label for="manual_label">Etat observe (optionnel)</label>
+          <span class="field-hint">Pre-annotez l'etat si vous le connaissez</span>
+          <select id="manual_label" name="manual_label">
+            <option value="">Je ne sais pas</option>
+            <option value="clean">Clean - Zone propre</option>
+            <option value="dirty">Dirty - Depot sauvage present</option>
+          </select>
+        </div>
+
+        <button class="button button-primary button-lg" type="submit" style="width: 100%; margin-top: var(--space-sm);">Analyser et enregistrer</button>
+      </form>
     </div>
 
-    <div class="field">
-      <label for="location_address">Adresse ou zone</label>
-      <input id="location_address" name="location_address" type="text" placeholder="Ex. Lyon 2, rue de la Republique">
+    <div style="margin-top: var(--space-lg); padding: var(--space-md); background: var(--bg-warm); border-radius: var(--radius-md); text-align: center;">
+      <p style="margin: 0; color: var(--text-muted); font-size: 14px;">
+        💡 Votre signalement sera analyse automatiquement et contribuera a ameliorer notre base de donnees collaborative.
+      </p>
     </div>
-
-    <input id="latitude" name="latitude" type="hidden">
-    <input id="longitude" name="longitude" type="hidden">
-    <input id="location_accuracy" name="location_accuracy" type="hidden">
-
-    <div class="geo-row">
-      <button class="button secondary" id="geolocation-button" type="button">Utiliser ma position</button>
-      <span class="geo-status" id="geolocation-status">Position non ajoutee</span>
-    </div>
-
-    <div class="field">
-      <label for="manual_label">Etat observe</label>
-      <select id="manual_label" name="manual_label">
-        <option value="">Non annotee</option>
-        <option value="clean">Clean</option>
-        <option value="dirty">Dirty</option>
-      </select>
-    </div>
-
-    <button class="button" type="submit">Analyser l'image</button>
-  </form>
+  </div>
 </section>
 {% endblock %}
 
@@ -53,23 +70,28 @@
 
   geoButton.addEventListener("click", () => {
     if (!navigator.geolocation) {
-      geoStatus.textContent = "Geolocalisation indisponible";
+      geoStatus.textContent = "Geolocalisation indisponible sur ce navigateur";
+      geoStatus.style.color = "var(--orange)";
       return;
     }
 
     geoButton.disabled = true;
-    geoStatus.textContent = "Recherche de position...";
+    geoStatus.textContent = "Recherche de votre position...";
+    geoStatus.style.color = "var(--text-muted)";
 
     navigator.geolocation.getCurrentPosition(
       (position) => {
         latitudeInput.value = position.coords.latitude;
         longitudeInput.value = position.coords.longitude;
         accuracyInput.value = position.coords.accuracy;
-        geoStatus.textContent = `Position ajoutee (${Math.round(position.coords.accuracy)} m)`;
+        geoStatus.textContent = `✓ Position ajoutee (precision : ${Math.round(position.coords.accuracy)} m)`;
+        geoStatus.style.color = "var(--green)";
+        geoStatus.classList.add('success');
         geoButton.disabled = false;
       },
       () => {
         geoStatus.textContent = "Position refusee ou indisponible";
+        geoStatus.style.color = "var(--orange)";
         geoButton.disabled = false;
       },
       {

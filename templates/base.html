@@ -3,34 +3,57 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Wild Dump Prevention</title>
+  <title>{% block title %}Wild Dump Prevention{% endblock %}</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+  {% block head %}{% endblock %}
 </head>
 <body>
   <header class="topbar">
-    <a class="brand" href="{{ url_for('dashboard') }}">
-      <span class="brand-mark">W</span>
-      <span>Wild Dump Prevention</span>
-    </a>
-    <nav>
-      <a class="{{ 'active' if request.path == '/' else '' }}" href="{{ url_for('dashboard') }}">Dashboard</a>
-      <a class="{{ 'active' if request.path == '/upload' else '' }}" href="{{ url_for('upload') }}">Upload</a>
-      <a class="{{ 'active' if request.path.startswith('/images') else '' }}" href="{{ url_for('images') }}">Images</a>
-    </nav>
+    <div class="topbar-inner">
+      <a class="brand" href="{{ url_for('dashboard') }}">
+        <span class="brand-mark">W</span>
+        <span class="brand-text">Wild Dump <span>Prevention</span></span>
+      </a>
+      <nav class="nav-links">
+        <a class="{{ 'active' if request.path == '/' else '' }}" href="{{ url_for('dashboard') }}">Accueil</a>
+        <a class="{{ 'active' if request.path == '/map' else '' }}" href="{{ url_for('map_view') }}">Carte</a>
+        <a class="{{ 'active' if request.path.startswith('/images') else '' }}" href="{{ url_for('images') }}">Images</a>
+        <a class="nav-cta" href="{{ url_for('upload') }}">Signaler</a>
+      </nav>
+    </div>
   </header>
 
-  <main class="container">
+  <main>
     {% with messages = get_flashed_messages(with_categories=true) %}
       {% if messages %}
-        <div class="messages">
-          {% for category, message in messages %}
-            <div class="message {{ category }}">{{ message }}</div>
-          {% endfor %}
+        <div class="container">
+          <div class="messages" style="margin-top: var(--space-md);">
+            {% for category, message in messages %}
+              <div class="message {{ category }}">{{ message }}</div>
+            {% endfor %}
+          </div>
         </div>
       {% endif %}
     {% endwith %}
     {% block content %}{% endblock %}
   </main>
+
+  <footer class="footer">
+    <div class="container">
+      <div class="footer-inner">
+        <p class="footer-text">Wild Dump Prevention - Solution Factory 2024</p>
+        <div class="footer-links">
+          <a href="{{ url_for('dashboard') }}">Accueil</a>
+          <a href="{{ url_for('map_view') }}">Carte</a>
+          <a href="{{ url_for('images') }}">Images</a>
+        </div>
+      </div>
+    </div>
+  </footer>
+
   {% block scripts %}{% endblock %}
 </body>
 </html>

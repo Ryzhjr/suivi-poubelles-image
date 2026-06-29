@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 import shutil
 import sqlite3
@@ -6,6 +6,7 @@ from uuid import uuid4
 
 from flask import Flask, flash, jsonify, redirect, render_template, request, send_from_directory, url_for
 from PIL import Image, ImageFilter, ImageStat
+from PIL.ExifTags import TAGS, GPSTAGS
 from werkzeug.utils import secure_filename
 
 
@@ -79,9 +80,53 @@ def relative_path(path):
     return path.resolve().relative_to(BASE_DIR).as_posix()
 
 
+def extract_gps_from_exif(img):
+    """Extract GPS coordinates from image EXIF data."""
+    try:
+        exif = img._getexif()
+        if not exif:
+            return None, None
+
+        gps_info = {}
+        for tag_id, value in exif.items():
+            tag = TAGS.get(tag_id, tag_id)
+            if tag == "GPSInfo":
+                for gps_tag_id, gps_value in value.items():
+                    gps_tag = GPSTAGS.get(gps_tag_id, gps_tag_id)
+                    gps_info[gps_tag] = gps_value
+                break
+
+        if not gps_info:
+            return None, None
+
+        def convert_to_degrees(value):
+            d, m, s = value
+            return float(d) + float(m) / 60 + float(s) / 3600
+
+        lat = None
+        lng = None
+
+        if "GPSLatitude" in gps_info and "GPSLatitudeRef" in gps_info:
+            lat = convert_to_degrees(gps_info["GPSLatitude"])
+            if gps_info["GPSLatitudeRef"] == "S":
+                lat = -lat
+
+        if "GPSLongitude" in gps_info and "GPSLongitudeRef" in gps_info:
+            lng = convert_to_degrees(gps_info["GPSLongitude"])
+            if gps_info["GPSLongitudeRef"] == "W":
+                lng = -lng
+
+        return lat, lng
+    except Exception:
+        return None, None
+
+
 def extract_features(path):
     file_size = path.stat().st_size
     with Image.open(path) as img:
+        # Extract GPS from EXIF before converting to RGB
+        exif_lat, exif_lng = extract_gps_from_exif(img)
+
         img = img.convert("RGB")
         width, height = img.size
         stat = ImageStat.Stat(img)
@@ -105,6 +150,8 @@ def extract_features(path):
         "brightness": round(brightness, 2),
         "contrast": round(contrast, 2),
         "edge_score": round(edge_score, 2),
+        "exif_latitude": exif_lat,
+        "exif_longitude": exif_lng,
     }
 
 
@@ -154,6 +201,13 @@ def save_image_record(
 ):
     features = extract_features(path)
     automatic_label = classify_by_rules(features)
+
+    # Use EXIF GPS if no coordinates provided
+    if latitude is None and features.get("exif_latitude") is not None:
+        latitude = features["exif_latitude"]
+    if longitude is None and features.get("exif_longitude") is not None:
+        longitude = features["exif_longitude"]
+
     with get_db() as conn:
         cursor = conn.execute(
             """
@@ -243,7 +297,128 @@ def format_size(size):
 @app.route("/")
 def dashboard():
     stats = get_stats()
-    return render_template("dashboard.html", stats=stats)
+
+    with get_db() as conn:
+        # Évolution temporelle (30 derniers jours)
+        timeline = conn.execute("""
+            SELECT DATE(upload_date) as date, COUNT(*) as count
+            FROM images
+            GROUP BY DATE(upload_date)
+            ORDER BY date DESC
+            LIMIT 30
+        """).fetchall()
+
+        # Inverser pour avoir l'ordre chronologique
+        timeline_dates = [row["date"] for row in reversed(timeline)]
+        timeline_counts = [row["count"] for row in reversed(timeline)]
+
+        # Répartition par label
+        labels_dist = conn.execute("""
+            SELECT
+                COALESCE(manual_label, 'non_annotee') as label,
+                COUNT(*) as count
+            FROM images
+            GROUP BY label
+        """).fetchall()
+
+        label_data = {"clean": 0, "dirty": 0, "non_annotee": 0}
+        for row in labels_dist:
+            label_data[row["label"]] = row["count"]
+
+        # Top 10 villes
+        cities = conn.execute("""
+            SELECT
+                COALESCE(location_address, 'Non localisé') as city,
+                COUNT(*) as count
+            FROM images
+            GROUP BY city
+            ORDER BY count DESC
+            LIMIT 10
+        """).fetchall()
+
+        cities_names = [row["city"] for row in cities]
+        cities_counts = [row["count"] for row in cities]
+
+        # Distribution luminosité (100 dernières images)
+        brightness_dist = conn.execute("""
+            SELECT brightness
+            FROM images
+            WHERE brightness IS NOT NULL
+            ORDER BY id DESC
+            LIMIT 100
+        """).fetchall()
+
+        brightness_values = [row["brightness"] for row in brightness_dist]
+
+        # Sources
+        sources = conn.execute("""
+            SELECT source, COUNT(*) as count
+            FROM images
+            GROUP BY source
+        """).fetchall()
+
+        sources_names = [row["source"] for row in sources]
+        sources_counts = [row["count"] for row in sources]
+
+        # Statistiques générales supplémentaires
+        geo_stats = conn.execute("""
+            SELECT
+                COUNT(*) as total,
+                SUM(CASE WHEN latitude IS NOT NULL AND longitude IS NOT NULL THEN 1 ELSE 0 END) as geolocated
+            FROM images
+        """).fetchone()
+
+        # Taux de géolocalisation
+        geo_percentage = round((geo_stats["geolocated"] / geo_stats["total"] * 100) if geo_stats["total"] > 0 else 0, 1)
+
+        # Taux d'annotation manuelle
+        annotation_stats = conn.execute("""
+            SELECT
+                COUNT(*) as total,
+                SUM(CASE WHEN manual_label IS NOT NULL THEN 1 ELSE 0 END) as annotated
+            FROM images
+        """).fetchone()
+
+        annotation_percentage = round((annotation_stats["annotated"] / annotation_stats["total"] * 100) if annotation_stats["total"] > 0 else 0, 1)
+
+        # Précision de l'annotation automatique (concordance avec manuel)
+        accuracy_stats = conn.execute("""
+            SELECT
+                COUNT(*) as total,
+                SUM(CASE WHEN manual_label = automatic_label THEN 1 ELSE 0 END) as correct
+            FROM images
+            WHERE manual_label IS NOT NULL
+        """).fetchone()
+
+        accuracy_percentage = round((accuracy_stats["correct"] / accuracy_stats["total"] * 100) if accuracy_stats["total"] > 0 else 0, 1)
+
+        # Signalements cette semaine
+        week_stats = conn.execute("""
+            SELECT COUNT(*) as count
+            FROM images
+            WHERE upload_date >= datetime('now', '-7 days')
+        """).fetchone()
+
+        # Signalements aujourd'hui
+        today_stats = conn.execute("""
+            SELECT COUNT(*) as count
+            FROM images
+            WHERE DATE(upload_date) = DATE('now')
+        """).fetchone()
+
+    return render_template("dashboard.html",
+        stats=stats,
+        timeline_data={"dates": timeline_dates, "counts": timeline_counts},
+        label_data=label_data,
+        cities_data={"cities": cities_names, "counts": cities_counts},
+        brightness_data=brightness_values,
+        sources_data={"sources": sources_names, "counts": sources_counts},
+        geo_percentage=geo_percentage,
+        annotation_percentage=annotation_percentage,
+        accuracy_percentage=accuracy_percentage,
+        week_count=week_stats["count"],
+        today_count=today_stats["count"]
+    )
 
 
 @app.route("/api/stats")
@@ -342,6 +517,22 @@ def annotate(image_id):
     return redirect(url_for("image_detail", image_id=image_id))
 
 
+@app.route("/images/<int:image_id>/location", methods=["POST"])
+def update_location(image_id):
+    latitude = parse_optional_float(request.form.get("latitude"))
+    longitude = parse_optional_float(request.form.get("longitude"))
+    location_address = request.form.get("location_address", "").strip() or None
+
+    with get_db() as conn:
+        conn.execute(
+            "UPDATE images SET latitude = ?, longitude = ?, location_address = ? WHERE id = ?",
+            (latitude, longitude, location_address, image_id),
+        )
+        conn.commit()
+    flash("Localisation mise a jour.", "success")
+    return redirect(url_for("image_detail", image_id=image_id))
+
+
 @app.route("/uploads/<path:filename>")
 def uploaded_file(filename):
     return send_from_directory(UPLOAD_DIR, filename)
@@ -350,6 +541,108 @@ def uploaded_file(filename):
 @app.route("/media/<path:filepath>")
 def media(filepath):
     return send_from_directory(BASE_DIR, filepath)
+
+
+@app.route("/map")
+def map_view():
+    return render_template("map.html")
+
+
+@app.route("/api/markers")
+def api_markers():
+    label = request.args.get("label", "all")
+    period = request.args.get("period", "all")
+
+    query = "SELECT id, latitude, longitude, manual_label, automatic_label, location_address, upload_date, filepath FROM images WHERE latitude IS NOT NULL AND longitude IS NOT NULL"
+    params = []
+
+    if label == "clean":
+        query += " AND manual_label = ?"
+        params.append("clean")
+    elif label == "dirty":
+        query += " AND manual_label = ?"
+        params.append("dirty")
+    elif label == "non_annotee":
+        query += " AND manual_label IS NULL"
+
+    if period == "24h":
+        cutoff = (datetime.now() - timedelta(hours=24)).strftime("%Y-%m-%d %H:%M:%S")
+        query += " AND upload_date >= ?"
+        params.append(cutoff)
+    elif period == "week":
+        cutoff = (datetime.now() - timedelta(days=7)).strftime("%Y-%m-%d %H:%M:%S")
+        query += " AND upload_date >= ?"
+        params.append(cutoff)
+    elif period == "month":
+        cutoff = (datetime.now() - timedelta(days=30)).strftime("%Y-%m-%d %H:%M:%S")
+        query += " AND upload_date >= ?"
+        params.append(cutoff)
+
+    query += " ORDER BY upload_date DESC"
+
+    with get_db() as conn:
+        rows = conn.execute(query, params).fetchall()
+
+    markers = []
+    lats = []
+    lngs = []
+
+    for row in rows:
+        lats.append(row["latitude"])
+        lngs.append(row["longitude"])
+        markers.append({
+            "id": row["id"],
+            "lat": row["latitude"],
+            "lng": row["longitude"],
+            "label": row["manual_label"] or "non_annotee",
+            "auto_label": row["automatic_label"],
+            "address": row["location_address"],
+            "date": row["upload_date"][:10] if row["upload_date"] else None,
+            "thumbnail": "/" + row["filepath"],
+        })
+
+    bounds = None
+    if lats and lngs:
+        bounds = {
+            "north": max(lats),
+            "south": min(lats),
+            "east": max(lngs),
+            "west": min(lngs),
+        }
+
+    return jsonify({"markers": markers, "count": len(markers), "bounds": bounds})
+
+
+@app.route("/api/heatmap")
+def api_heatmap():
+    period = request.args.get("period", "all")
+
+    query = """
+        SELECT latitude, longitude FROM images
+        WHERE latitude IS NOT NULL AND longitude IS NOT NULL
+        AND (manual_label = 'dirty' OR (manual_label IS NULL AND automatic_label = 'dirty'))
+    """
+    params = []
+
+    if period == "24h":
+        cutoff = (datetime.now() - timedelta(hours=24)).strftime("%Y-%m-%d %H:%M:%S")
+        query += " AND upload_date >= ?"
+        params.append(cutoff)
+    elif period == "week":
+        cutoff = (datetime.now() - timedelta(days=7)).strftime("%Y-%m-%d %H:%M:%S")
+        query += " AND upload_date >= ?"
+        params.append(cutoff)
+    elif period == "month":
+        cutoff = (datetime.now() - timedelta(days=30)).strftime("%Y-%m-%d %H:%M:%S")
+        query += " AND upload_date >= ?"
+        params.append(cutoff)
+
+    with get_db() as conn:
+        rows = conn.execute(query, params).fetchall()
+
+    points = [[row["latitude"], row["longitude"], 1.0] for row in rows]
+
+    return jsonify({"points": points, "count": len(points)})
 
 
 @app.route("/import-dataset", methods=["POST"])

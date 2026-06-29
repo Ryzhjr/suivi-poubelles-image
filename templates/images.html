@@ -1,34 +1,48 @@
 {% extends "base.html" %}
 
 {% block content %}
-<section class="page-head">
-  <div>
-    <h1>Images</h1>
-    <p>Liste des images stockees avec annotations et predictions.</p>
-  </div>
-  <div class="filters">
-    <a class="{{ 'active' if not selected_label else '' }}" href="{{ url_for('images') }}">Toutes</a>
-    <a class="{{ 'active' if selected_label == 'clean' else '' }}" href="{{ url_for('images', label='clean') }}">Clean</a>
-    <a class="{{ 'active' if selected_label == 'dirty' else '' }}" href="{{ url_for('images', label='dirty') }}">Dirty</a>
-    <a class="{{ 'active' if selected_label == 'non_annotee' else '' }}" href="{{ url_for('images', label='non_annotee') }}">Non annotees</a>
+<section class="page-header">
+  <div class="container">
+    <div class="page-header-inner">
+      <div>
+        <h1>Galerie d'images</h1>
+        <p>Parcourez les signalements avec annotations et predictions</p>
+      </div>
+    </div>
   </div>
 </section>
 
-<section class="image-list">
-  {% for image in images %}
-    <a class="image-row" href="{{ url_for('image_detail', image_id=image.id) }}">
-      <img src="{{ url_for('media', filepath=image.filepath) }}" alt="{{ image.original_filename }}">
-      <div class="row-main">
-        <strong>{{ image.original_filename }}</strong>
-        <span>{{ image.upload_date }} - {{ image.location_address or image.source }}</span>
-      </div>
-      <div class="badge {{ image.manual_label or 'unknown' }}">{{ image.manual_label or 'non annotee' }}</div>
-      <div class="badge auto">{{ image.automatic_label }}</div>
-    </a>
-  {% else %}
-    <div class="panel">
-      <p>Aucune image trouvee.</p>
+<section class="page-section">
+  <div class="container">
+    <div class="filters">
+      <a class="{{ 'active' if not selected_label else '' }}" href="{{ url_for('images') }}">Toutes</a>
+      <a class="{{ 'active' if selected_label == 'clean' else '' }}" href="{{ url_for('images', label='clean') }}">✓ Clean</a>
+      <a class="{{ 'active' if selected_label == 'dirty' else '' }}" href="{{ url_for('images', label='dirty') }}">⚠ Dirty</a>
+      <a class="{{ 'active' if selected_label == 'non_annotee' else '' }}" href="{{ url_for('images', label='non_annotee') }}">◯ Non annotees</a>
     </div>
-  {% endfor %}
+
+    {% if images %}
+    <div class="image-list">
+      {% for image in images %}
+        <a class="image-row" href="{{ url_for('image_detail', image_id=image.id) }}">
+          <img src="{{ url_for('media', filepath=image.filepath) }}" alt="{{ image.original_filename }}">
+          <div class="row-main">
+            <strong>{{ image.original_filename }}</strong>
+            <span>{{ image.upload_date[:16] }}{% if image.location_address %} - {{ image.location_address }}{% endif %}</span>
+          </div>
+          <div class="badge {{ image.manual_label or 'unknown' }}">{{ image.manual_label or 'non annote' }}</div>
+          <div class="badge auto">Auto : {{ image.automatic_label }}</div>
+        </a>
+      {% endfor %}
+    </div>
+    {% else %}
+    <div class="empty-state">
+      <div class="empty-state-icon">🔍</div>
+      <h3>Aucune image trouvee</h3>
+      <p>Aucune image ne correspond aux filtres selectionnes.</p>
+      <a href="{{ url_for('images') }}" class="button button-secondary">Voir toutes les images</a>
+    </div>
+    {% endif %}
+  </div>
 </section>
 {% endblock %}

@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+
+{% block head %}
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="" />
+<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.4.1/dist/MarkerCluster.css" />
+<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.4.1/dist/MarkerCluster.Default.css" />
+<link rel="stylesheet" href="{{ url_for('static', filename='css/map.css') }}" />
+{% endblock %}
+
+{% block content %}
+<div class="container">
+  <section class="map-page">
+    <div class="map-header">
+      <div class="map-title">
+        <h1>Carte des signalements</h1>
+        <p>Visualisation geographique en temps reel</p>
+      </div>
+      <div class="map-controls">
+        <div class="filter-group">
+          <label>Etat</label>
+          <select id="filter-label">
+            <option value="all">Tous</option>
+            <option value="clean">Clean</option>
+            <option value="dirty">Dirty</option>
+            <option value="non_annotee">Non annotes</option>
+          </select>
+        </div>
+        <div class="filter-group">
+          <label>Periode</label>
+          <select id="filter-period">
+            <option value="all">Tout</option>
+            <option value="24h">24 heures</option>
+            <option value="week">7 jours</option>
+            <option value="month">30 jours</option>
+          </select>
+        </div>
+        <button id="toggle-heatmap">
+          <span class="heatmap-icon"></span>
+          Heatmap
+        </button>
+      </div>
+    </div>
+
+    <div class="map-wrapper">
+      <div id="map"></div>
+      <div class="map-legend">
+        <div class="legend-title">Legende</div>
+        <div class="legend-item">
+          <span class="legend-marker clean"></span>
+          <span>Clean</span>
+        </div>
+        <div class="legend-item">
+          <span class="legend-marker dirty"></span>
+          <span>Dirty</span>
+        </div>
+        <div class="legend-item">
+          <span class="legend-marker unknown"></span>
+          <span>Non annote</span>
+        </div>
+        <div class="legend-item" id="legend-heatmap" style="display: none;">
+          <span class="legend-heatmap"></span>
+          <span>Zones a risque</span>
+        </div>
+      </div>
+      <div class="map-stats" id="map-stats">
+        <span id="marker-count">0</span> points affiches
+      </div>
+    </div>
+  </section>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+<script src="https://unpkg.com/leaflet.markercluster@1.4.1/dist/leaflet.markercluster.js"></script>
+<script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
+<script src="{{ url_for('static', filename='js/map.js') }}"></script>
+{% endblock %}
