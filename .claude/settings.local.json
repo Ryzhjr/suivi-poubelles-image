@@ -4,7 +4,9 @@
       "Bash(cat:*)",
       "Bash(python3:*)",
       "Bash(python:*)",
-      "Bash(/mnt/c/Users/samya/suivi-poubelles-image/.venv/Scripts/python.exe:*)"
+      "Bash(/mnt/c/Users/samya/suivi-poubelles-image/.venv/Scripts/python.exe:*)",
+      "Bash(/mnt/c/Users/samya/suivi-poubelles-image/.venv/Scripts/pip.exe list:*)",
+      "Bash(/mnt/c/Users/samya/suivi-poubelles-image/.venv/Scripts/pip.exe install:*)"
     ],
     "deny": [],
     "ask": []

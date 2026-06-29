@@ -156,6 +156,63 @@
       </div>
     </div>
 
+    <!-- Métriques de Classification -->
+    <div class="dashboard-grid">
+      <div class="dashboard-card">
+        <h2>Performance de la classification automatique</h2>
+        <p>Métriques basées sur la comparaison avec les annotations manuelles</p>
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: var(--space-lg); margin-top: var(--space-md);">
+          <!-- Accuracy Globale -->
+          <div style="text-align: center; padding: var(--space-md); background: var(--bg-warm); border-radius: var(--radius-md);">
+            <div style="font-size: 14px; color: var(--text-muted); margin-bottom: 8px; font-weight: 500;">Accuracy Globale</div>
+            <div style="font-size: 32px; font-weight: 700; color: var(--green); margin-bottom: 4px;">{{ global_accuracy }}%</div>
+            <div style="font-size: 12px; color: var(--text-soft);">Taux de prédiction correcte</div>
+          </div>
+
+          <!-- Classe Clean -->
+          <div style="padding: var(--space-md); background: var(--bg-warm); border-radius: var(--radius-md); border-left: 4px solid var(--green);">
+            <div style="font-weight: 600; color: var(--green); margin-bottom: var(--space-sm);">Classe "Clean"</div>
+            <div style="display: grid; gap: 8px;">
+              <div style="display: flex; justify-content: space-between;">
+                <span style="font-size: 13px; color: var(--text-soft);">Precision</span>
+                <strong style="color: var(--text);">{{ metrics_clean.precision }}%</strong>
+              </div>
+              <div style="display: flex; justify-content: space-between;">
+                <span style="font-size: 13px; color: var(--text-soft);">Recall</span>
+                <strong style="color: var(--text);">{{ metrics_clean.recall }}%</strong>
+              </div>
+              <div style="display: flex; justify-content: space-between;">
+                <span style="font-size: 13px; color: var(--text-soft);">F1-Score</span>
+                <strong style="color: var(--green);">{{ metrics_clean.f1_score }}%</strong>
+              </div>
+            </div>
+          </div>
+
+          <!-- Classe Dirty -->
+          <div style="padding: var(--space-md); background: var(--bg-warm); border-radius: var(--radius-md); border-left: 4px solid var(--orange);">
+            <div style="font-weight: 600; color: var(--orange); margin-bottom: var(--space-sm);">Classe "Dirty"</div>
+            <div style="display: grid; gap: 8px;">
+              <div style="display: flex; justify-content: space-between;">
+                <span style="font-size: 13px; color: var(--text-soft);">Precision</span>
+                <strong style="color: var(--text);">{{ metrics_dirty.precision }}%</strong>
+              </div>
+              <div style="display: flex; justify-content: space-between;">
+                <span style="font-size: 13px; color: var(--text-soft);">Recall</span>
+                <strong style="color: var(--text);">{{ metrics_dirty.recall }}%</strong>
+              </div>
+              <div style="display: flex; justify-content: space-between;">
+                <span style="font-size: 13px; color: var(--text-soft);">F1-Score</span>
+                <strong style="color: var(--orange);">{{ metrics_dirty.f1_score }}%</strong>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div style="margin-top: var(--space-md); padding: var(--space-sm); background: rgba(104, 182, 109, 0.1); border-radius: var(--radius-sm); font-size: 13px; color: var(--text-soft);">
+          <strong>Info :</strong> Precision = fiabilité des prédictions | Recall = capacité à détecter | F1-Score = moyenne harmonique
+        </div>
+      </div>
+    </div>
+
     <!-- Timeline Evolution -->
     <div class="dashboard-grid">
       <div class="dashboard-card">
@@ -185,7 +242,7 @@
       </div>
     </div>
 
-    <!-- Brightness & Sources -->
+    <!-- Brightness & File Sizes -->
     <div class="dashboard-grid two-col">
       <div class="dashboard-card">
         <h2>Distribution de luminosité</h2>
@@ -195,10 +252,10 @@
         </div>
       </div>
       <div class="dashboard-card">
-        <h2>Sources des signalements</h2>
-        <p>Provenance des images</p>
+        <h2>Distribution des tailles de fichiers</h2>
+        <p>Histogramme des tailles en Mo</p>
         <div class="chart-container">
-          <canvas id="sourcesChart"></canvas>
+          <canvas id="fileSizeChart"></canvas>
         </div>
       </div>
     </div>
@@ -318,7 +375,7 @@ new Chart(document.getElementById('timelineChart'), {
 // Label Distribution Chart
 const labelData = {{ label_data | tojson }};
 new Chart(document.getElementById('labelChart'), {
-  type: 'doughnut',
+  type: 'pie',
   data: {
     labels: ['Clean', 'Dirty', 'Non annoté'],
     datasets: [{
@@ -457,16 +514,17 @@ new Chart(document.getElementById('brightnessChart'), {
   }
 });
 
-// Sources Chart
-const sourcesData = {{ sources_data | tojson }};
-new Chart(document.getElementById('sourcesChart'), {
-  type: 'pie',
+// File Size Distribution Chart (Chart.js)
+const fileSizes = {{ file_sizes_data | tojson }};
+new Chart(document.getElementById('fileSizeChart'), {
+  type: 'bar',
   data: {
-    labels: sourcesData.sources,
+    labels: fileSizes.bins,
     datasets: [{
-      data: sourcesData.counts,
-      backgroundColor: [COLORS.green, COLORS.teal, COLORS.orange, COLORS.violet],
-      borderWidth: 0
+      label: 'Nombre d\'images',
+      data: fileSizes.counts,
+      backgroundColor: COLORS.teal,
+      borderRadius: 6
     }]
   },
   options: {
@@ -474,18 +532,32 @@ new Chart(document.getElementById('sourcesChart'), {
     maintainAspectRatio: false,
     plugins: {
       legend: {
-        position: 'bottom',
-        labels: {
-          padding: 16,
-          usePointStyle: true,
-          pointStyle: 'circle',
-          font: { size: 13 }
-        }
+        display: false
       },
       tooltip: {
         backgroundColor: 'rgba(18, 19, 15, 0.9)',
         padding: 12,
         cornerRadius: 8
+      }
+    },
+    scales: {
+      y: {
+        beginAtZero: true,
+        ticks: {
+          precision: 0,
+          font: { size: 12 }
+        },
+        grid: {
+          color: 'rgba(125, 125, 117, 0.1)'
+        }
+      },
+      x: {
+        grid: {
+          display: false
+        },
+        ticks: {
+          font: { size: 11 }
+        }
       }
     }
   }

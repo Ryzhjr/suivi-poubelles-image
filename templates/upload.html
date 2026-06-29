@@ -15,12 +15,52 @@
 <section class="page-section">
   <div class="container container-narrow">
     <div class="form-card">
-      <form class="upload-form" method="post" enctype="multipart/form-data">
-        <div class="field">
+      <!-- Mode selection -->
+      <div style="display: flex; gap: var(--space-sm); margin-bottom: var(--space-md);">
+        <button class="button button-secondary" id="toggle-camera-btn" type="button" style="flex: 1;">
+          📷 Prendre une photo
+        </button>
+        <button class="button button-secondary" id="toggle-file-btn" type="button" style="flex: 1;">
+          📁 Choisir un fichier
+        </button>
+      </div>
+
+      <!-- Camera section -->
+      <div id="camera-section" style="display: none; margin-bottom: var(--space-md);">
+        <div style="position: relative; background: #000; border-radius: var(--radius-md); overflow: hidden; margin-bottom: var(--space-sm);">
+          <video id="camera-video" autoplay playsinline style="width: 100%; display: block; max-height: 400px; object-fit: cover;"></video>
+          <canvas id="camera-canvas" style="display: none;"></canvas>
+        </div>
+        <div style="display: flex; gap: var(--space-sm);">
+          <button class="button button-primary" id="capture-btn" type="button" style="flex: 1;">
+            📸 Capturer
+          </button>
+          <button class="button button-secondary" id="stop-camera-btn" type="button">
+            ✕ Fermer
+          </button>
+        </div>
+      </div>
+
+      <!-- Preview section -->
+      <div id="preview-section" style="display: none; margin-bottom: var(--space-md);">
+        <div style="position: relative; border-radius: var(--radius-md); overflow: hidden; margin-bottom: var(--space-sm);">
+          <img id="preview-image" src="" alt="Preview" style="width: 100%; display: block; max-height: 400px; object-fit: cover;">
+        </div>
+        <button class="button button-secondary button-sm" id="retake-btn" type="button" style="width: 100%;">
+          🔄 Reprendre la photo
+        </button>
+      </div>
+
+      <!-- Upload form -->
+      <form class="upload-form" method="post" enctype="multipart/form-data" id="upload-form">
+        <div class="field" id="file-input-field">
           <label for="image">Photo du depot sauvage*</label>
           <span class="field-hint">Formats acceptes : JPG, JPEG, PNG</span>
-          <input id="image" name="image" type="file" accept="image/*" capture="environment" required>
+          <input id="image" name="image" type="file" accept="image/*" capture="environment">
         </div>
+
+        <!-- Hidden input for camera capture -->
+        <input type="hidden" id="camera-data" name="camera_data">
 
         <div class="field">
           <label for="location_address">Adresse ou zone</label>
@@ -62,20 +102,44 @@
 
 {% block scripts %}
 <script>
+  // Elements
+  const cameraSection = document.getElementById("camera-section");
+  const previewSection = document.getElementById("preview-section");
+  const fileInputField = document.getElementById("file-input-field");
+  const toggleCameraBtn = document.getElementById("toggle-camera-btn");
+  const toggleFileBtn = document.getElementById("toggle-file-btn");
+  const cameraVideo = document.getElementById("camera-video");
+  const cameraCanvas = document.getElementById("camera-canvas");
+  const captureBtn = document.getElementById("capture-btn");
+  const stopCameraBtn = document.getElementById("stop-camera-btn");
+  const retakeBtn = document.getElementById("retake-btn");
+  const previewImage = document.getElementById("preview-image");
+  const cameraDataInput = document.getElementById("camera-data");
+  const fileInput = document.getElementById("image");
+  const uploadForm = document.getElementById("upload-form");
+
   const geoButton = document.getElementById("geolocation-button");
   const geoStatus = document.getElementById("geolocation-status");
   const latitudeInput = document.getElementById("latitude");
   const longitudeInput = document.getElementById("longitude");
   const accuracyInput = document.getElementById("location_accuracy");
 
-  geoButton.addEventListener("click", () => {
+  let stream = null;
+  let capturedBlob = null;
+
+  // Geolocation function
+  function getGeolocation(autoMode = false) {
     if (!navigator.geolocation) {
-      geoStatus.textContent = "Geolocalisation indisponible sur ce navigateur";
-      geoStatus.style.color = "var(--orange)";
+      if (!autoMode) {
+        geoStatus.textContent = "Geolocalisation indisponible sur ce navigateur";
+        geoStatus.style.color = "var(--orange)";
+      }
       return;
     }
 
-    geoButton.disabled = true;
+    if (!autoMode) {
+      geoButton.disabled = true;
+    }
     geoStatus.textContent = "Recherche de votre position...";
     geoStatus.style.color = "var(--text-muted)";
 
@@ -87,12 +151,16 @@
         geoStatus.textContent = `✓ Position ajoutee (precision : ${Math.round(position.coords.accuracy)} m)`;
         geoStatus.style.color = "var(--green)";
         geoStatus.classList.add('success');
-        geoButton.disabled = false;
+        if (!autoMode) {
+          geoButton.disabled = false;
+        }
       },
       () => {
-        geoStatus.textContent = "Position refusee ou indisponible";
-        geoStatus.style.color = "var(--orange)";
-        geoButton.disabled = false;
+        if (!autoMode) {
+          geoStatus.textContent = "Position refusee ou indisponible";
+          geoStatus.style.color = "var(--orange)";
+          geoButton.disabled = false;
+        }
       },
       {
         enableHighAccuracy: true,
@@ -100,6 +168,153 @@
         maximumAge: 0
       }
     );
+  }
+
+  // Manual geolocation button
+  geoButton.addEventListener("click", () => getGeolocation(false));
+
+  // Toggle camera mode
+  toggleCameraBtn.addEventListener("click", async () => {
+    try {
+      // Check if getUserMedia is supported
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        throw new Error("Votre navigateur ne supporte pas l'acces a la camera");
+      }
+
+      // Request camera access with simpler constraints first
+      stream = await navigator.mediaDevices.getUserMedia({
+        video: {
+          facingMode: "environment",
+          width: { ideal: 1920 },
+          height: { ideal: 1080 }
+        }
+      });
+
+      cameraVideo.srcObject = stream;
+      cameraSection.style.display = "block";
+      fileInputField.style.display = "none";
+      previewSection.style.display = "none";
+      fileInput.removeAttribute("required");
+
+      // Auto-get geolocation when camera opens
+      getGeolocation(true);
+
+    } catch (err) {
+      console.error("Camera error details:", err);
+      console.error("Error name:", err.name);
+      console.error("Error message:", err.message);
+
+      let errorMsg = "Impossible d'acceder a la camera";
+      if (err.name === "NotAllowedError" || err.name === "PermissionDeniedError") {
+        errorMsg = "Permission refusee. Autorisez l'acces a la camera dans les parametres du navigateur.";
+      } else if (err.name === "NotFoundError" || err.name === "DevicesNotFoundError") {
+        errorMsg = "Aucune camera trouvee sur cet appareil.";
+      } else if (err.name === "NotReadableError" || err.name === "TrackStartError") {
+        errorMsg = "Camera deja utilisee par une autre application. Fermez les autres applications et reessayez.";
+      } else if (err.name === "OverconstrainedError") {
+        errorMsg = "Contraintes camera non supportees. Tentative avec parametres reduits...";
+        // Retry with minimal constraints
+        try {
+          stream = await navigator.mediaDevices.getUserMedia({ video: true });
+          cameraVideo.srcObject = stream;
+          cameraSection.style.display = "block";
+          fileInputField.style.display = "none";
+          previewSection.style.display = "none";
+          fileInput.removeAttribute("required");
+          getGeolocation(true);
+          return;
+        } catch (retryErr) {
+          errorMsg = "Impossible d'acceder a la camera meme avec parametres reduits.";
+        }
+      } else {
+        errorMsg += ": " + err.message;
+      }
+
+      alert(errorMsg);
+    }
+  });
+
+  // Stop camera
+  stopCameraBtn.addEventListener("click", () => {
+    if (stream) {
+      stream.getTracks().forEach(track => track.stop());
+      stream = null;
+    }
+    cameraSection.style.display = "none";
+    fileInputField.style.display = "block";
+    fileInput.setAttribute("required", "");
+  });
+
+  // Capture photo
+  captureBtn.addEventListener("click", () => {
+    const context = cameraCanvas.getContext("2d");
+    cameraCanvas.width = cameraVideo.videoWidth;
+    cameraCanvas.height = cameraVideo.videoHeight;
+    context.drawImage(cameraVideo, 0, 0);
+
+    // Convert canvas to blob
+    cameraCanvas.toBlob((blob) => {
+      capturedBlob = blob;
+      const url = URL.createObjectURL(blob);
+      previewImage.src = url;
+
+      // Stop camera
+      if (stream) {
+        stream.getTracks().forEach(track => track.stop());
+        stream = null;
+      }
+
+      // Show preview
+      cameraSection.style.display = "none";
+      previewSection.style.display = "block";
+    }, "image/jpeg", 0.9);
+  });
+
+  // Retake photo
+  retakeBtn.addEventListener("click", () => {
+    toggleCameraBtn.click();
+  });
+
+  // Toggle file mode
+  toggleFileBtn.addEventListener("click", () => {
+    if (stream) {
+      stream.getTracks().forEach(track => track.stop());
+      stream = null;
+    }
+    cameraSection.style.display = "none";
+    previewSection.style.display = "none";
+    fileInputField.style.display = "block";
+    fileInput.setAttribute("required", "");
+    capturedBlob = null;
+    cameraDataInput.value = "";
+  });
+
+  // Form submission
+  uploadForm.addEventListener("submit", async (e) => {
+    if (capturedBlob) {
+      e.preventDefault();
+
+      // Create FormData and append captured image
+      const formData = new FormData(uploadForm);
+      formData.delete("image"); // Remove file input
+      formData.append("image", capturedBlob, "capture.jpg");
+
+      // Submit form
+      try {
+        const response = await fetch(uploadForm.action || window.location.pathname, {
+          method: "POST",
+          body: formData
+        });
+
+        if (response.ok) {
+          window.location.href = response.url;
+        } else {
+          alert("Erreur lors de l'envoi");
+        }
+      } catch (err) {
+        alert("Erreur : " + err.message);
+      }
+    }
   });
 </script>
 {% endblock %}

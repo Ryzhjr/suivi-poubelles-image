@@ -3,11 +3,17 @@ from pathlib import Path
 import shutil
 import sqlite3
 from uuid import uuid4
+import io
+import base64
 
 from flask import Flask, flash, jsonify, redirect, render_template, request, send_from_directory, url_for
 from PIL import Image, ImageFilter, ImageStat
 from PIL.ExifTags import TAGS, GPSTAGS
 from werkzeug.utils import secure_filename
+import matplotlib
+matplotlib.use('Agg')  # Backend sans GUI pour serveur
+import matplotlib.pyplot as plt
+import numpy as np
 
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -69,6 +75,10 @@ def init_db():
             conn.execute("ALTER TABLE images ADD COLUMN longitude REAL")
         if "location_accuracy" not in columns:
             conn.execute("ALTER TABLE images ADD COLUMN location_accuracy REAL")
+        if "dark_ratio" not in columns:
+            conn.execute("ALTER TABLE images ADD COLUMN dark_ratio REAL")
+        if "bright_ratio" not in columns:
+            conn.execute("ALTER TABLE images ADD COLUMN bright_ratio REAL")
         conn.commit()
 
 
@@ -132,10 +142,30 @@ def extract_features(path):
         stat = ImageStat.Stat(img)
         avg_red, avg_green, avg_blue = stat.mean
 
+        # Histogrammes RVB (distribution des couleurs)
+        histogram_rgb = img.histogram()
+        # histogram_rgb contient 768 valeurs : 256 pour R, 256 pour G, 256 pour B
+        # On stocke la somme des bins pour chaque canal comme signature simplifiée
+        hist_red_sum = sum(histogram_rgb[0:256])
+        hist_green_sum = sum(histogram_rgb[256:512])
+        hist_blue_sum = sum(histogram_rgb[512:768])
+
         grayscale = img.convert("L")
         gray_stat = ImageStat.Stat(grayscale)
         brightness = gray_stat.mean[0]
         contrast = gray_stat.stddev[0]
+
+        # Histogramme de luminance (niveaux de gris)
+        histogram_luminance = grayscale.histogram()
+        # 256 valeurs pour les niveaux de gris (0 = noir, 255 = blanc)
+        # On calcule des métriques utiles : pics dans les zones sombres/claires
+        dark_pixels = sum(histogram_luminance[0:85])    # Pixels sombres (0-84)
+        mid_pixels = sum(histogram_luminance[85:170])   # Pixels moyens (85-169)
+        bright_pixels = sum(histogram_luminance[170:256])  # Pixels clairs (170-255)
+        total_pixels = width * height
+
+        dark_ratio = (dark_pixels / total_pixels * 100) if total_pixels > 0 else 0
+        bright_ratio = (bright_pixels / total_pixels * 100) if total_pixels > 0 else 0
 
         edges = grayscale.filter(ImageFilter.FIND_EDGES)
         edge_score = ImageStat.Stat(edges).mean[0]
@@ -150,6 +180,8 @@ def extract_features(path):
         "brightness": round(brightness, 2),
         "contrast": round(contrast, 2),
         "edge_score": round(edge_score, 2),
+        "dark_ratio": round(dark_ratio, 2),
+        "bright_ratio": round(bright_ratio, 2),
         "exif_latitude": exif_lat,
         "exif_longitude": exif_lng,
     }
@@ -215,9 +247,10 @@ def save_image_record(
                 filename, original_filename, filepath, source, upload_date,
                 location_address, latitude, longitude, location_accuracy,
                 manual_label, automatic_label, file_size, width, height,
-                avg_red, avg_green, avg_blue, brightness, contrast, edge_score
+                avg_red, avg_green, avg_blue, brightness, contrast, edge_score,
+                dark_ratio, bright_ratio
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 path.name,
@@ -240,6 +273,8 @@ def save_image_record(
                 features["brightness"],
                 features["contrast"],
                 features["edge_score"],
+                features["dark_ratio"],
+                features["bright_ratio"],
             ),
         )
         conn.commit()
@@ -258,6 +293,73 @@ def image_exists_by_source(source, original_filename):
 def get_image(image_id):
     with get_db() as conn:
         return conn.execute("SELECT * FROM images WHERE id = ?", (image_id,)).fetchone()
+
+
+# ===== GÉNÉRATION DE GRAPHIQUES MATPLOTLIB (Backend Python) =====
+
+def generate_file_size_distribution_graph():
+    """Génère un graphique matplotlib de la distribution des tailles de fichiers."""
+    with get_db() as conn:
+        file_sizes = conn.execute("SELECT file_size FROM images").fetchall()
+
+    if not file_sizes:
+        return None
+
+    # Convertir en Mo
+    sizes_mb = [row["file_size"] / (1024 * 1024) for row in file_sizes]
+
+    # Créer le graphique
+    plt.figure(figsize=(10, 6))
+    plt.hist(sizes_mb, bins=20, color='#3BA58E', edgecolor='black', alpha=0.7)
+    plt.xlabel('Taille du fichier (Mo)', fontsize=12)
+    plt.ylabel('Nombre d\'images', fontsize=12)
+    plt.title('Distribution des tailles de fichiers', fontsize=14, fontweight='bold')
+    plt.grid(axis='y', alpha=0.3)
+
+    # Sauvegarder en base64 pour inclusion dans HTML
+    buffer = io.BytesIO()
+    plt.savefig(buffer, format='png', dpi=100, bbox_inches='tight')
+    buffer.seek(0)
+    image_base64 = base64.b64encode(buffer.read()).decode('utf-8')
+    plt.close()
+
+    return image_base64
+
+
+def generate_label_distribution_bar():
+    """Génère un graphique en barres de la répartition des annotations."""
+    with get_db() as conn:
+        labels_dist = conn.execute("""
+            SELECT
+                COALESCE(manual_label, 'non_annotee') as label,
+                COUNT(*) as count
+            FROM images
+            GROUP BY label
+        """).fetchall()
+
+    if not labels_dist:
+        return None
+
+    labels = [row["label"] for row in labels_dist]
+    counts = [row["count"] for row in labels_dist]
+
+    colors = {'clean': '#68B66D', 'dirty': '#D97A3A', 'non_annotee': '#7D7D75'}
+    bar_colors = [colors.get(label, '#7D7D75') for label in labels]
+
+    plt.figure(figsize=(8, 6))
+    plt.bar(labels, counts, color=bar_colors, edgecolor='black', alpha=0.8)
+    plt.xlabel('Annotation', fontsize=12)
+    plt.ylabel('Nombre d\'images', fontsize=12)
+    plt.title('Répartition des annotations manuelles', fontsize=14, fontweight='bold')
+    plt.grid(axis='y', alpha=0.3)
+
+    buffer = io.BytesIO()
+    plt.savefig(buffer, format='png', dpi=100, bbox_inches='tight')
+    buffer.seek(0)
+    image_base64 = base64.b64encode(buffer.read()).decode('utf-8')
+    plt.close()
+
+    return image_base64
 
 
 def get_stats():
@@ -406,18 +508,96 @@ def dashboard():
             WHERE DATE(upload_date) = DATE('now')
         """).fetchone()
 
+        # === MÉTRIQUES DE CLASSIFICATION ===
+        # Calcul de Accuracy, Precision, Recall pour chaque classe
+
+        # Pour la classe "clean"
+        clean_metrics = conn.execute("""
+            SELECT
+                -- True Positives : auto=clean ET manual=clean
+                SUM(CASE WHEN automatic_label = 'clean' AND manual_label = 'clean' THEN 1 ELSE 0 END) as tp,
+                -- False Positives : auto=clean mais manual!=clean
+                SUM(CASE WHEN automatic_label = 'clean' AND manual_label != 'clean' THEN 1 ELSE 0 END) as fp,
+                -- False Negatives : auto!=clean mais manual=clean
+                SUM(CASE WHEN automatic_label != 'clean' AND manual_label = 'clean' THEN 1 ELSE 0 END) as fn,
+                -- True Negatives : auto!=clean ET manual!=clean
+                SUM(CASE WHEN automatic_label != 'clean' AND manual_label != 'clean' THEN 1 ELSE 0 END) as tn
+            FROM images
+            WHERE manual_label IS NOT NULL
+        """).fetchone()
+
+        # Pour la classe "dirty"
+        dirty_metrics = conn.execute("""
+            SELECT
+                SUM(CASE WHEN automatic_label = 'dirty' AND manual_label = 'dirty' THEN 1 ELSE 0 END) as tp,
+                SUM(CASE WHEN automatic_label = 'dirty' AND manual_label != 'dirty' THEN 1 ELSE 0 END) as fp,
+                SUM(CASE WHEN automatic_label != 'dirty' AND manual_label = 'dirty' THEN 1 ELSE 0 END) as fn,
+                SUM(CASE WHEN automatic_label != 'dirty' AND manual_label != 'dirty' THEN 1 ELSE 0 END) as tn
+            FROM images
+            WHERE manual_label IS NOT NULL
+        """).fetchone()
+
+        # Calcul des métriques
+        def calculate_metrics(tp, fp, fn, tn):
+            precision = (tp / (tp + fp)) if (tp + fp) > 0 else 0
+            recall = (tp / (tp + fn)) if (tp + fn) > 0 else 0
+            f1_score = (2 * precision * recall / (precision + recall)) if (precision + recall) > 0 else 0
+            return {
+                "precision": round(precision * 100, 1),
+                "recall": round(recall * 100, 1),
+                "f1_score": round(f1_score * 100, 1)
+            }
+
+        metrics_clean = calculate_metrics(
+            clean_metrics["tp"] or 0,
+            clean_metrics["fp"] or 0,
+            clean_metrics["fn"] or 0,
+            clean_metrics["tn"] or 0
+        )
+
+        metrics_dirty = calculate_metrics(
+            dirty_metrics["tp"] or 0,
+            dirty_metrics["fp"] or 0,
+            dirty_metrics["fn"] or 0,
+            dirty_metrics["tn"] or 0
+        )
+
+        # Accuracy globale (déjà calculée mais reformulée)
+        global_accuracy = accuracy_percentage
+
+    # Préparer les données de tailles de fichiers pour Chart.js
+    with get_db() as conn:
+        file_sizes_raw = conn.execute("SELECT file_size FROM images").fetchall()
+
+    # Convertir en Mo et créer des bins
+    sizes_mb = [row["file_size"] / (1024 * 1024) for row in file_sizes_raw]
+
+    # Créer des bins (0-0.5, 0.5-1, 1-1.5, etc.)
+    if sizes_mb:
+        hist, bin_edges = np.histogram(sizes_mb, bins=15)
+        bin_labels = [f"{bin_edges[i]:.1f}-{bin_edges[i+1]:.1f}" for i in range(len(bin_edges)-1)]
+        file_sizes_data = {
+            "bins": bin_labels,
+            "counts": hist.tolist()
+        }
+    else:
+        file_sizes_data = {"bins": [], "counts": []}
+
     return render_template("dashboard.html",
         stats=stats,
         timeline_data={"dates": timeline_dates, "counts": timeline_counts},
         label_data=label_data,
         cities_data={"cities": cities_names, "counts": cities_counts},
         brightness_data=brightness_values,
-        sources_data={"sources": sources_names, "counts": sources_counts},
+        file_sizes_data=file_sizes_data,
         geo_percentage=geo_percentage,
         annotation_percentage=annotation_percentage,
         accuracy_percentage=accuracy_percentage,
         week_count=week_stats["count"],
-        today_count=today_stats["count"]
+        today_count=today_stats["count"],
+        metrics_clean=metrics_clean,
+        metrics_dirty=metrics_dirty,
+        global_accuracy=global_accuracy
     )
 
 
