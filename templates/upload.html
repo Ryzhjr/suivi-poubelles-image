@@ -123,12 +123,53 @@
   const latitudeInput = document.getElementById("latitude");
   const longitudeInput = document.getElementById("longitude");
   const accuracyInput = document.getElementById("location_accuracy");
+  const addressInput = document.getElementById("location_address");
 
   let stream = null;
   let capturedBlob = null;
 
+  // Reverse geocoding function using Nominatim (OpenStreetMap)
+  async function reverseGeocode(lat, lon) {
+    try {
+      const response = await fetch(
+        `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}&zoom=18&addressdetails=1`,
+        {
+          headers: {
+            'User-Agent': 'WildDumpPrevention/1.0'
+          }
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error("Erreur API geocodage");
+      }
+
+      const data = await response.json();
+
+      if (data.address) {
+        const addr = data.address;
+        let formattedAddress = "";
+
+        if (addr.road) formattedAddress += addr.road;
+        if (addr.house_number) formattedAddress = addr.house_number + " " + formattedAddress;
+        if (addr.suburb) formattedAddress += (formattedAddress ? ", " : "") + addr.suburb;
+        if (addr.city || addr.town || addr.village) {
+          formattedAddress += (formattedAddress ? ", " : "") + (addr.city || addr.town || addr.village);
+        }
+        if (addr.postcode) formattedAddress += " " + addr.postcode;
+
+        return formattedAddress || data.display_name;
+      }
+
+      return data.display_name || "";
+    } catch (err) {
+      console.error("Erreur reverse geocoding:", err);
+      return "";
+    }
+  }
+
   // Geolocation function
-  function getGeolocation(autoMode = false) {
+  async function getGeolocation(autoMode = false) {
     if (!navigator.geolocation) {
       if (!autoMode) {
         geoStatus.textContent = "Geolocalisation indisponible sur ce navigateur";
@@ -144,11 +185,22 @@
     geoStatus.style.color = "var(--text-muted)";
 
     navigator.geolocation.getCurrentPosition(
-      (position) => {
+      async (position) => {
         latitudeInput.value = position.coords.latitude;
         longitudeInput.value = position.coords.longitude;
         accuracyInput.value = position.coords.accuracy;
-        geoStatus.textContent = `✓ Position ajoutee (precision : ${Math.round(position.coords.accuracy)} m)`;
+
+        geoStatus.textContent = "Recuperation de l'adresse...";
+
+        const address = await reverseGeocode(position.coords.latitude, position.coords.longitude);
+
+        if (address) {
+          addressInput.value = address;
+          geoStatus.textContent = `✓ Position et adresse ajoutees (precision : ${Math.round(position.coords.accuracy)} m)`;
+        } else {
+          geoStatus.textContent = `✓ Position ajoutee (precision : ${Math.round(position.coords.accuracy)} m)`;
+        }
+
         geoStatus.style.color = "var(--green)";
         geoStatus.classList.add('success');
         if (!autoMode) {
